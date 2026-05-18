@@ -38,7 +38,7 @@ export default function ProjectPage() {
 
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
-      <TopToolbar projectName={project.name} />
+      <TopToolbar project={project} onProjectUpdate={setProject} />
 
       {/* Canvas fills remaining height */}
       <div style={{ flex:1, overflow:'hidden', display: 'flex' }}>
