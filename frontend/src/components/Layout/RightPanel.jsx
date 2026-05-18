@@ -3,7 +3,7 @@ import api from '../../services/api';
 
 const STATUSES = ['todo', 'in-progress', 'review', 'done'];
 const PRIORITIES = ['low', 'medium', 'high', 'critical'];
-const DIFFICULTIES = ['easy', 'medium', 'hard'];
+const DIFFICULTIES = ['easy', 'medium', 'hard', 'tough'];
 const COLORS = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#14b8a6'];
 
 export default function RightPanel({ block, onUpdate, onClose }) {
@@ -48,13 +48,25 @@ export default function RightPanel({ block, onUpdate, onClose }) {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Description</label>
+          <label className="form-label">Description (Short)</label>
           <textarea
-            rows={3}
+            rows={2}
             value={local.description || ''}
             onChange={e => setLocal(p => ({ ...p, description: e.target.value }))}
             onBlur={e => save('description', e.target.value)}
             style={{ resize: 'vertical' }}
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Full Content</label>
+          <textarea
+            rows={6}
+            value={local.content || ''}
+            onChange={e => setLocal(p => ({ ...p, content: e.target.value }))}
+            onBlur={e => save('content', e.target.value)}
+            style={{ resize: 'vertical' }}
+            placeholder="Add detailed content..."
           />
         </div>
 
@@ -67,7 +79,8 @@ export default function RightPanel({ block, onUpdate, onClose }) {
           </div>
           <div className="form-group" style={{ flex: 1 }}>
             <label className="form-label">Priority</label>
-            <select value={local.priority || 'medium'} onChange={e => save('priority', e.target.value)}>
+            <select value={local.priority || ''} onChange={e => save('priority', e.target.value)}>
+              <option value="">None</option>
               {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
@@ -76,7 +89,8 @@ export default function RightPanel({ block, onUpdate, onClose }) {
         <div className="rp-row">
           <div className="form-group" style={{ flex: 1 }}>
             <label className="form-label">Difficulty</label>
-            <select value={local.difficulty || 'medium'} onChange={e => save('difficulty', e.target.value)}>
+            <select value={local.difficulty || ''} onChange={e => save('difficulty', e.target.value)}>
+              <option value="">None</option>
               {DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>

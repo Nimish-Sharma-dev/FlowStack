@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { useSocket } from '../../hooks/useSocket';
 import { useKeyboard } from '../../hooks/useKeyboard';
+import RightPanel from '../Layout/RightPanel';
 
 const GRID_SIZE = 30;
 const MIN_ZOOM = 0.15;
@@ -210,7 +211,8 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
 
   const statusColor = { todo: '#6366f1', 'in-progress': '#f59e0b', review: '#8b5cf6', done: '#10b981' };
   const priorityColor = { low: '#10b981', medium: '#6366f1', high: '#f59e0b', critical: '#ef4444' };
-  const difficultyColor = { easy: '#10b981', medium: '#f59e0b', hard: '#ef4444' };
+  const difficultyColor = { easy: '#10b981', medium: '#f59e0b', hard: '#ef4444', tough: '#8b5cf6' };
+  const CONNECTION_COLORS = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#14b8a6'];
 
   const handleCreateConnection = async (toBlockId) => {
     if (!connecting || connecting.fromId === toBlockId) return;
@@ -254,8 +256,13 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
         {/* SVG connections */}
         <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
           <defs>
-            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-              <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" opacity="0.7" />
+            {CONNECTION_COLORS.map(c => (
+              <marker key={c} id={`arrow-${c.replace('#', '')}`} markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill={c} opacity="0.8" />
+              </marker>
+            ))}
+            <marker id="arrow-default" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="var(--primary-color)" opacity="0.8" />
             </marker>
           </defs>
           {connections.map(conn => {
@@ -268,10 +275,12 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
             const ty = pan.y + (to.position.y + (to.size?.height || 120) / 2) * zoom;
             const mx = (fx + tx) / 2;
             const connColor = conn.color || 'var(--primary-color)';
+            const markerId = conn.color ? `url(#arrow-${conn.color.replace('#', '')})` : 'url(#arrow-default)';
             return (
               <path key={conn._id}
                 d={`M${fx},${fy} C${mx},${fy} ${mx},${ty} ${tx},${ty}`}
                 stroke={connColor} strokeWidth="3" fill="none" opacity="0.8"
+                markerEnd={markerId}
                 style={{ pointerEvents: 'stroke', cursor: 'context-menu' }}
                 onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, connId: conn._id }); }}
               />
@@ -358,11 +367,16 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
               </div>
 
               {/* Block body */}
-              <div style={{ flex: 1, padding: `${5 * zoom}px ${10 * zoom}px`, overflow: 'hidden' }}>
+              <div style={{ flex: 1, padding: `${5 * zoom}px ${10 * zoom}px`, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 4*zoom }}>
                 {block.description && (
                   <p style={{ fontSize: 11 * zoom, color: 'var(--text-secondary)', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                     {block.description}
                   </p>
+                )}
+                {block.content && (
+                  <div style={{ flex: 1, fontSize: 10 * zoom, color: 'var(--text-primary)', background: 'rgba(0,0,0,0.05)', padding: 4*zoom, borderRadius: 4*zoom, overflowY: 'auto', whiteSpace: 'pre-wrap', border: '1px solid var(--border-color)' }}>
+                    {block.content}
+                  </div>
                 )}
               </div>
 
@@ -406,13 +420,28 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
       </div>
 
       {/* Toolbar bottom-right */}
-      <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', gap: 8, zIndex: 100 }}>
+      <div style={{ position: 'absolute', bottom: 20, right: selectedId ? 280 : 20, display: 'flex', gap: 8, zIndex: 100, transition: 'right 0.3s' }}>
         <button className="canvas-fab" onClick={() => setZoom(z => Math.min(MAX_ZOOM, z + 0.15))} title="Zoom in">+</button>
         <span className="canvas-zoom-label">{Math.round(zoom * 100)}%</span>
         <button className="canvas-fab" onClick={() => setZoom(z => Math.max(MIN_ZOOM, z - 0.15))} title="Zoom out">−</button>
         <button className="canvas-fab" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Reset view">⊙</button>
         <button className="canvas-fab primary" onClick={() => createBlock(300, 200)} title="Add block (Ctrl+N)">+ Block</button>
       </div>
+
+      {/* Right Panel properties editor */}
+      {selectedId && (
+        <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 500, boxShadow: 'var(--shadow-xl)' }}>
+          <RightPanel 
+            block={blocks.find(b => b._id === selectedId)} 
+            onUpdate={(updated) => {
+              setBlocks(prev => prev.map(b => b._id === updated._id ? updated : b));
+              // API call is handled inside RightPanel, we just need to broadcast the socket update
+              emit('block_updated', { projectId, blockId: updated._id, changes: updated });
+            }} 
+            onClose={() => setSelectedId(null)} 
+          />
+        </div>
+      )}
 
       {/* Context menu */}
       {contextMenu && (

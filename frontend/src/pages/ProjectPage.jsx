@@ -2,6 +2,7 @@ import React, { useEffect, useContext } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import Canvas from '../components/Canvas/Canvas';
+import TopToolbar from '../components/Layout/TopToolbar';
 import { AuthContext } from '../context/AuthContext';
 import api from '../services/api';
 
@@ -37,21 +38,10 @@ export default function ProjectPage() {
 
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
-      {/* Top toolbar strip */}
-      <div style={{
-        height: 48, background:'var(--bg-card)', borderBottom:'1px solid var(--border-color)',
-        display:'flex', alignItems:'center', padding:'0 1.25rem', gap:'1rem', zIndex:10
-      }}>
-        <a href="/dashboard" style={{ fontSize:'0.85rem', color:'var(--text-muted)', textDecoration:'none' }}>← Dashboard</a>
-        <span style={{ color:'var(--border-color)' }}>|</span>
-        <span style={{ fontWeight:700, color:'var(--text-primary)', fontSize:'0.95rem' }}>{project.name}</span>
-        <span style={{ marginLeft:'auto', fontSize:'0.8rem', color:'var(--text-muted)' }}>
-          {project.blocks?.length || 0} blocks · {project.teamMembers?.length || 1} member{project.teamMembers?.length !== 1 ? 's' : ''}
-        </span>
-      </div>
+      <TopToolbar projectName={project.name} />
 
       {/* Canvas fills remaining height */}
-      <div style={{ flex:1, overflow:'hidden' }}>
+      <div style={{ flex:1, overflow:'hidden', display: 'flex' }}>
         <Canvas
           projectId={projectId}
           userId={user?._id}
