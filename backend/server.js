@@ -158,6 +158,7 @@ const blockSchema = new mongoose.Schema(
     color: { type: String, default: '#3B82F6' },
     icon: String,
     priority: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'medium' },
+    difficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'medium' },
     status: { type: String, enum: ['todo', 'in-progress', 'review', 'done'], default: 'todo' },
     deadline: Date,
     position: { x: Number, y: Number },
@@ -177,6 +178,7 @@ const connectionSchema = new mongoose.Schema(
     toBlockId: { type: mongoose.Schema.Types.ObjectId, ref: 'Block', required: true },
     connectionType: { type: String, default: 'arrow' }, // arrow, line, curve, etc.
     label: String,
+    color: { type: String, default: '#6366f1' },
   },
   { timestamps: true }
 );

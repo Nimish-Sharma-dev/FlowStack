@@ -1,13 +1,26 @@
 import React, { useContext, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import api from '../../services/api';
 
 export default function TopToolbar({ projectName }) {
   const navigate = useNavigate();
+  const { projectId } = useParams();
   const { user } = useContext(AuthContext) || {};
   const { theme, setTheme } = useTheme ? useTheme() : { theme: 'dark', setTheme: () => {} };
   const [zoom, setZoomDisplay] = useState(100);
+  const [sharing, setSharing] = useState(false);
+
+  const handleShare = async () => {
+    setSharing(true);
+    try {
+      await api.patch(`/projects/${projectId}`, { visibility: 'public' });
+      await navigator.clipboard.writeText(window.location.href);
+      alert('Link copied! Anyone with the link can view this project.');
+    } catch (e) { console.error(e); }
+    finally { setSharing(false); }
+  };
 
   return (
     <div className="top-toolbar">
@@ -29,6 +42,9 @@ export default function TopToolbar({ projectName }) {
       </div>
 
       <div className="toolbar-right">
+        <button className="btn btn-primary btn-sm" onClick={handleShare} disabled={sharing}>
+          {sharing ? 'Generating...' : '🔗 Share Link'}
+        </button>
         <button className="btn btn-ghost btn-sm" title="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
           {theme === 'dark' ? '☀️' : '🌙'}
         </button>

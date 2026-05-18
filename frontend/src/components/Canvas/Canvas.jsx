@@ -21,7 +21,7 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
   const [dragging, setDragging] = useState(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState(null);
-  const [connecting, setConnecting] = useState(null);
+  const [connecting, setConnecting] = useState(null); // { fromId, x, y }
   const [cursors, setCursors] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
@@ -128,6 +128,13 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
       setBlocks(prev => prev.map(b => b._id === dragging.blockId ? { ...b, position: newPos } : b));
       return;
     }
+    if (connecting) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const cx = (e.clientX - rect.left - pan.x) / zoom;
+      const cy = (e.clientY - rect.top - pan.y) / zoom;
+      setConnecting(prev => ({ ...prev, x: cx, y: cy }));
+      return;
+    }
     // Emit cursor position
     if (projectId && userId) {
       const rect = canvasRef.current?.getBoundingClientRect();
@@ -146,6 +153,7 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
       if (block) updateBlockPos(dragging.blockId, block.position);
       setDragging(null);
     }
+    if (connecting) setConnecting(null);
   };
 
   const handleCanvasDblClick = (e) => {
@@ -159,11 +167,22 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
 
   const handleWheel = (e) => {
     e.preventDefault();
-    if (e.ctrlKey || e.metaKey) {
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      setZoom(z => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z * delta)));
-    } else {
+    if (e.shiftKey) {
       setPan(p => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+    } else {
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      setZoom(z => {
+        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z * delta));
+        const scaleChange = newZoom - z;
+        setPan(p => ({
+          x: p.x - ((mouseX - p.x) / z) * scaleChange,
+          y: p.y - ((mouseY - p.y) / z) * scaleChange
+        }));
+        return newZoom;
+      });
     }
   };
 
@@ -191,6 +210,26 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
 
   const statusColor = { todo: '#6366f1', 'in-progress': '#f59e0b', review: '#8b5cf6', done: '#10b981' };
   const priorityColor = { low: '#10b981', medium: '#6366f1', high: '#f59e0b', critical: '#ef4444' };
+  const difficultyColor = { easy: '#10b981', medium: '#f59e0b', hard: '#ef4444' };
+
+  const handleCreateConnection = async (toBlockId) => {
+    if (!connecting || connecting.fromId === toBlockId) return;
+    const conn = { projectId, fromBlockId: connecting.fromId, toBlockId, connectionType: 'arrow', color: '#6366f1' };
+    try {
+      const res = await api.post('/connections', conn);
+      setConnections(prev => [...prev, res.data]);
+      emit('connection_created', { projectId, connection: res.data });
+    } catch (e) { console.error(e); }
+    setConnecting(null);
+  };
+
+  const updateConnectionColor = async (connId, color) => {
+    setConnections(prev => prev.map(c => c._id === connId ? { ...c, color } : c));
+    setContextMenu(null);
+    try {
+      await api.patch(`/connections/${connId}`, { color });
+    } catch (e) { console.error(e); }
+  };
 
   return (
     <div className="canvas-wrapper" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: 'var(--bg-secondary)', cursor: isPanning ? 'grabbing' : connecting ? 'crosshair' : 'default' }}>
@@ -216,7 +255,7 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
         <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
           <defs>
             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-              <polygon points="0 0, 10 3.5, 0 7" fill="var(--primary-color)" opacity="0.7" />
+              <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" opacity="0.7" />
             </marker>
           </defs>
           {connections.map(conn => {
@@ -228,14 +267,22 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
             const tx = pan.x + (to.position.x + (to.size?.width || 250) / 2) * zoom;
             const ty = pan.y + (to.position.y + (to.size?.height || 120) / 2) * zoom;
             const mx = (fx + tx) / 2;
+            const connColor = conn.color || 'var(--primary-color)';
             return (
               <path key={conn._id}
                 d={`M${fx},${fy} C${mx},${fy} ${mx},${ty} ${tx},${ty}`}
-                stroke="var(--primary-color)" strokeWidth="2" fill="none" opacity="0.6"
-                markerEnd="url(#arrowhead)"
+                stroke={connColor} strokeWidth="3" fill="none" opacity="0.8"
+                style={{ pointerEvents: 'stroke', cursor: 'context-menu' }}
+                onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, connId: conn._id }); }}
               />
             );
           })}
+          {connecting && (
+            <path
+              d={`M${pan.x + connecting.startX * zoom},${pan.y + connecting.startY * zoom} L${pan.x + connecting.x * zoom},${pan.y + connecting.y * zoom}`}
+              stroke="#6366f1" strokeWidth="2" strokeDasharray="4" fill="none" opacity="0.5"
+            />
+          )}
         </svg>
 
         {/* Blocks */}
@@ -270,10 +317,27 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
                 const cy = (e.clientY - rect.top - pan.y) / zoom;
                 setDragging({ blockId: block._id, offsetX: cx - block.position.x, offsetY: cy - block.position.y });
               }}
-              onMouseUp={() => setDragging(null)}
+              onMouseUp={(e) => {
+                if (connecting) {
+                  e.stopPropagation();
+                  handleCreateConnection(block._id);
+                } else {
+                  setDragging(null);
+                }
+              }}
               onDoubleClick={e => { e.stopPropagation(); startTitleEdit(block); }}
               onContextMenu={e => handleContextMenu(e, block._id)}
             >
+              {/* Connection anchor */}
+              <div 
+                style={{ position: 'absolute', right: -8*zoom, top: '50%', transform: 'translateY(-50%)', width: 16*zoom, height: 16*zoom, borderRadius: '50%', background: 'var(--primary-color)', border: '2px solid var(--bg-card)', cursor: 'crosshair', zIndex: 10, display: isSelected ? 'block' : 'none' }}
+                onMouseDown={e => {
+                  e.stopPropagation();
+                  const rect = canvasRef.current.getBoundingClientRect();
+                  setConnecting({ fromId: block._id, startX: block.position.x + (block.size?.width || 250), startY: block.position.y + (block.size?.height || 120)/2, x: (e.clientX - rect.left - pan.x)/zoom, y: (e.clientY - rect.top - pan.y)/zoom });
+                }}
+              />
+
               {/* Block header */}
               <div style={{ padding: `${6 * zoom}px ${10 * zoom}px`, borderBottom: `1px solid var(--border-color)`, display: 'flex', alignItems: 'center', gap: 6 * zoom, flex: '0 0 auto' }}>
                 {isEditing ? (
@@ -314,6 +378,16 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
                     {block.priority}
                   </span>
                 )}
+                {block.difficulty && (
+                  <span style={{ fontSize: 9 * zoom, fontWeight: 700, textTransform: 'uppercase', background: `${difficultyColor[block.difficulty] || '#6366f1'}22`, color: difficultyColor[block.difficulty] || '#6366f1', padding: `${2 * zoom}px ${5 * zoom}px`, borderRadius: 20 * zoom }}>
+                    {block.difficulty}
+                  </span>
+                )}
+                {block.deadline && (
+                  <span style={{ fontSize: 9 * zoom, color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: `${1 * zoom}px ${5 * zoom}px`, borderRadius: 20 * zoom }}>
+                    ⏱ {new Date(block.deadline).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                  </span>
+                )}
                 {block.tags?.slice(0, 2).map(tag => (
                   <span key={tag} style={{ fontSize: 9 * zoom, color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: `${1 * zoom}px ${5 * zoom}px`, borderRadius: 20 * zoom }}>{tag}</span>
                 ))}
@@ -344,16 +418,29 @@ export default function Canvas({ projectId, userId, userName, initialBlocks = []
       {contextMenu && (
         <div style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 8, boxShadow: 'var(--shadow-lg)', zIndex: 200, minWidth: 160, overflow: 'hidden' }}
           onMouseLeave={() => setContextMenu(null)}>
-          {[
-            { label: '✏️ Edit title', action: () => { const b = blocks.find(b => b._id === contextMenu.blockId); if (b) startTitleEdit(b); } },
-            { label: '🗑 Delete block', action: () => deleteBlock(contextMenu.blockId), danger: true },
-          ].map(item => (
-            <button key={item.label} onClick={() => { item.action(); setContextMenu(null); }}
-              style={{ display: 'block', width: '100%', padding: '0.55rem 1rem', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', color: item.danger ? 'var(--error-color)' : 'var(--text-primary)', cursor: 'pointer' }}
-              onMouseEnter={e => e.target.style.background = 'var(--bg-hover)'}
-              onMouseLeave={e => e.target.style.background = 'none'}
-            >{item.label}</button>
-          ))}
+          
+          {contextMenu.connId ? (
+            <>
+              <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}>Line Color</div>
+              <div style={{ display: 'flex', gap: 6, padding: '10px 12px', flexWrap: 'wrap', width: 150 }}>
+                {['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#14b8a6'].map(c => (
+                  <div key={c} onClick={() => updateConnectionColor(contextMenu.connId, c)} style={{ width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer', border: '2px solid transparent' }} />
+                ))}
+              </div>
+              <button onClick={() => { api.delete(`/connections/${contextMenu.connId}`); setConnections(prev => prev.filter(c => c._id !== contextMenu.connId)); setContextMenu(null); }} style={{ display: 'block', width: '100%', padding: '0.55rem 1rem', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', color: 'var(--error-color)', cursor: 'pointer', borderTop: '1px solid var(--border-color)' }} onMouseEnter={e => e.target.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.target.style.background = 'none'}>🗑 Delete line</button>
+            </>
+          ) : (
+            [
+              { label: '✏️ Edit title', action: () => { const b = blocks.find(b => b._id === contextMenu.blockId); if (b) startTitleEdit(b); } },
+              { label: '🗑 Delete block', action: () => deleteBlock(contextMenu.blockId), danger: true },
+            ].map(item => (
+              <button key={item.label} onClick={() => { item.action(); setContextMenu(null); }}
+                style={{ display: 'block', width: '100%', padding: '0.55rem 1rem', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', color: item.danger ? 'var(--error-color)' : 'var(--text-primary)', cursor: 'pointer' }}
+                onMouseEnter={e => e.target.style.background = 'var(--bg-hover)'}
+                onMouseLeave={e => e.target.style.background = 'none'}
+              >{item.label}</button>
+            ))
+          )}
         </div>
       )}
 

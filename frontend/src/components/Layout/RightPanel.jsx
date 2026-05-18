@@ -3,6 +3,7 @@ import api from '../../services/api';
 
 const STATUSES = ['todo', 'in-progress', 'review', 'done'];
 const PRIORITIES = ['low', 'medium', 'high', 'critical'];
+const DIFFICULTIES = ['easy', 'medium', 'hard'];
 const COLORS = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#14b8a6'];
 
 export default function RightPanel({ block, onUpdate, onClose }) {
@@ -71,6 +72,15 @@ export default function RightPanel({ block, onUpdate, onClose }) {
             </select>
           </div>
         </div>
+        
+        <div className="rp-row">
+          <div className="form-group" style={{ flex: 1 }}>
+            <label className="form-label">Difficulty</label>
+            <select value={local.difficulty || 'medium'} onChange={e => save('difficulty', e.target.value)}>
+              {DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+        </div>
 
         <div className="form-group">
           <label className="form-label">Color</label>
@@ -87,10 +97,10 @@ export default function RightPanel({ block, onUpdate, onClose }) {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Deadline</label>
+          <label className="form-label">Date & Time</label>
           <input
-            type="date"
-            value={local.deadline ? new Date(local.deadline).toISOString().split('T')[0] : ''}
+            type="datetime-local"
+            value={local.deadline ? new Date(local.deadline).toISOString().slice(0, 16) : ''}
             onChange={e => save('deadline', e.target.value)}
           />
         </div>
