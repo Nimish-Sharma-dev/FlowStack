@@ -23,10 +23,17 @@ const server = http.createServer(app);
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+const allowedOrigins = [
+  FRONTEND_URL,
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://flow-stack.netlify.app"
+];
+
 // ============ SOCKET.IO SETUP ============
 const io = socketIo(server, {
   cors: {
-    origin: FRONTEND_URL,
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -53,8 +60,14 @@ app.use(limiter);
 // CORS configuration
 app.use(
   cors({
-    origin: FRONTEND_URL,
-    credentials: true,
+    origin: function(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true
   })
 );
 
